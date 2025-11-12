@@ -3,8 +3,8 @@ const User = require("../Models/userModel.js");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
-
-const JWT_SECRET = "mySecretKey123";
+require("dotenv").config();
+const SECRET_KEY = process.env.JWT_SECRET;
 // POST /api/v1/users - Create new user
 router.post("/register", async (req, res) => {
   try {
@@ -26,7 +26,7 @@ router.post("/register", async (req, res) => {
     // Create JWT token
     const token = jwt.sign(
       { id: newUser._id, username: newUser.username },
-      JWT_SECRET,
+      SECRET_KEY,
       { expiresIn: "1h" } // token expires in 1 hour
     );
 
@@ -69,7 +69,7 @@ router.post("/login", async (req, res) => {
     // 3️ Generate JWT token
     const token = jwt.sign(
       { id: user._id, username: user.username },
-      JWT_SECRET,
+      SECRET_KEY,
       { expiresIn: "1h" }
     );
 
