@@ -91,4 +91,38 @@ router.post("/login", async (req, res) => {
     });
   }
 });
+
+//To update information
+router.patch("/edit", async (req, res) => {
+  try {
+    const { userId, newUsername } = req.body;
+
+    // 1️⃣ Validate input
+    if (!userId || !newUsername) {
+      return res.status(400).json({ error: "userId and newUsername are required" });
+    }
+
+    // 2️⃣ Update user in DB
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { username: newUsername },
+      { new: true } // return updated document
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // 3️⃣ Respond success
+    res.status(200).json({
+      message: "✅ Username updated successfully!",
+      user: updatedUser,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "❌ Failed to update username",
+      error: error.message,
+    });
+  }
+});
 module.exports = router;
