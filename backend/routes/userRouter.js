@@ -92,7 +92,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
-//To update information
+//PatchApi : To update information
 router.patch("/edit", async (req, res) => {
   try {
     const { userId, newUsername } = req.body;
