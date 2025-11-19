@@ -12,40 +12,60 @@ export const Signup = () => {
   const [lastName, setLastname] = useState("");
   const [userName, setUserName] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const navigate = useNavigate();
 
-const handleSignup = async () => {
-  try {
-    const res = await axios.post("http://localhost:3000/api/v1/user/register", {
-      firstName,
-      lastName,
-      username: userName,
-      password,
-    });
-
-    console.log("Signup response:", res.data);   // 👈 VERY IMPORTANT
-
-    if (res.data.success) {
-      if (res.data.token) {
-        localStorage.setItem("token", res.data.token);
-        console.log("Token saved:", res.data.token);
-      } else {
-        console.warn("No token returned from backend!");
-      }
-      
-      localStorage.setItem("username", userName);
-      localStorage.setItem("firstName", firstName);
-
-      navigate("/signin");
-    } else {
-      alert("Signup failed!");
+  const handleSignup = async () => {
+    // Validation
+    if (!firstName.trim() || !lastName.trim() || !userName.trim() || !password.trim()) {
+      setError("Please fill in all fields");
+      return;
     }
-  } catch (error) {
-    console.log("Signup error:", error);
-    alert(error.response?.data?.error || "Something went wrong!");
-  }
-};
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await axios.post("http://localhost:3000/api/v1/user/register", {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        username: userName.trim(),
+        password,
+      });
+
+      if (res.data.token) {
+        // Store token and user info
+        localStorage.setItem("token", res.data.token);
+        localStorage.setItem("username", res.data.user?.username || userName);
+        localStorage.setItem("firstName", res.data.user?.firstName || firstName);
+        localStorage.setItem("userId", res.data.user?.id || "");
+
+        // Navigate to signin
+        navigate("/signin");
+      } else {
+        setError("Signup failed - No token received");
+      }
+    } catch (error) {
+      console.error("Signup error:", error);
+      const errorMessage = error.response?.data?.error || "Something went wrong!";
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter" && !loading) {
+      handleSignup();
+    }
+  };
 
 
   return (
@@ -56,37 +76,69 @@ const handleSignup = async () => {
         <Heading label="Create Account" />
         <SubHeading label="Fill in your details to sign up" />
 
+        {/* Error Message */}
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
         {/* Inputs */}
         <div className="mt-6 space-y-4">
           <InputBox
-            onChange={(e) => setFirstname(e.target.value)}
+            onChange={(e) => {
+              setFirstname(e.target.value);
+              setError("");
+            }}
+            onKeyPress={handleKeyPress}
             placeholder="John"
             label="First Name"
+            value={firstName}
           />
 
           <InputBox
-            onChange={(e) => setLastname(e.target.value)}
+            onChange={(e) => {
+              setLastname(e.target.value);
+              setError("");
+            }}
+            onKeyPress={handleKeyPress}
             placeholder="Doe"
             label="Last Name"
+            value={lastName}
           />
 
           <InputBox
-            onChange={(e) => setUserName(e.target.value)}
+            onChange={(e) => {
+              setUserName(e.target.value);
+              setError("");
+            }}
+            onKeyPress={handleKeyPress}
             placeholder="example@gmail.com"
             label="Email"
+            value={userName}
           />
 
           <InputBox
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setError("");
+            }}
+            onKeyPress={handleKeyPress}
             type="password"
             placeholder="••••••••"
             label="Password"
+            value={password}
           />
         </div>
 
         {/* Button */}
         <div className="pt-6">
-          <Button onClick={handleSignup} label="Sign up" className="w-full" />
+          <Button 
+            onClick={handleSignup} 
+            label={loading ? "Signing up..." : "Sign up"} 
+            className="w-full"
+            disabled={loading}
+          />
         </div>
 
         {/* Bottom Link */}

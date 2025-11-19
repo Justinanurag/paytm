@@ -6,35 +6,51 @@ const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware.js");
 require("dotenv").config();
 const SECRET_KEY = process.env.JWT_SECRET;
-// POST /api/v1/users - Create new user
+// POST /api/v1/user/register - Create new user
 router.post("/register", async (req, res) => {
   try {
     const { username, password, firstName, lastName } = req.body;
-    //Check for existing user
+
+    // Validation
+    if (!username || !password || !firstName) {
+      return res.status(400).json({
+        error: "Username, password, and first name are required",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        error: "Password must be at least 6 characters long",
+      });
+    }
+
+    // Check for existing user
     const existingUser = await User.findOne({ username });
     if (existingUser) {
       return res.status(400).json({ error: "User already exists!" });
     }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
-      username,
+      username: username.trim(),
       password: hashedPassword,
-      firstName,
-      lastName,
+      firstName: firstName.trim(),
+      lastName: lastName?.trim() || "",
     });
+
+    await newUser.save();
 
     // Create JWT token
     const token = jwt.sign(
       { id: newUser._id, username: newUser.username },
       SECRET_KEY,
-      { expiresIn: "1h" } // token expires in 1 hour
+      { expiresIn: "24h" } // token expires in 24 hours
     );
 
-    await newUser.save();
-
     res.status(201).json({
-      message: "✅ User registered successfully!",
+      success: true,
+      message: "User registered successfully!",
       user: {
         id: newUser._id,
         username: newUser.username,
@@ -44,39 +60,49 @@ router.post("/register", async (req, res) => {
       token,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ error: "❌ Failed to create user", details: error.message });
+    console.error("Registration error:", error);
+    res.status(500).json({
+      error: "Failed to create user",
+      details: error.message,
+    });
   }
 });
 
-//Post for login
+// POST /api/v1/user/login - User login
 router.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-
   try {
-    // 1️ Check if user exists
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(404).json({ error: "User not found!" });
+    const { username, password } = req.body;
+
+    // Validation
+    if (!username || !password) {
+      return res.status(400).json({
+        error: "Username and password are required",
+      });
     }
 
-    // 2️ Compare entered password with hashed password in DB
+    // Check if user exists
+    const user = await User.findOne({ username: username.trim() });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials!" });
+    }
+
+    // Compare entered password with hashed password in DB
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ error: "Invalid credentials!" });
     }
 
-    // 3️ Generate JWT token
+    // Generate JWT token
     const token = jwt.sign(
       { id: user._id, username: user.username },
       SECRET_KEY,
-      { expiresIn: "1h" }
+      { expiresIn: "24h" }
     );
 
-    // 4️ Send success response
+    // Send success response
     res.status(200).json({
-      message: "✅ Login successful!",
+      success: true,
+      message: "Login successful!",
       user: {
         id: user._id,
         username: user.username,
@@ -86,31 +112,50 @@ router.post("/login", async (req, res) => {
       token,
     });
   } catch (error) {
-    return res.status(500).json({
-      error: "❌ Login failed!",
+    console.error("Login error:", error);
+    res.status(500).json({
+      error: "Login failed!",
       details: error.message,
     });
   }
 });
 
-//PatchApi : To update information
-
+// PATCH /api/v1/user/edit - Update user information
 router.patch("/edit", authMiddleware, async (req, res) => {
   try {
-    const { userId, newUsername } = req.body;
+    const { newUsername, firstName, lastName } = req.body;
+    const userId = req.user.id;
 
-    // 1️⃣ Validate input
-    if (!userId || !newUsername) {
+    // Build update object
+    const updateData = {};
+    if (newUsername) updateData.username = newUsername.trim();
+    if (firstName) updateData.firstName = firstName.trim();
+    if (lastName !== undefined) updateData.lastName = lastName.trim();
+
+    if (Object.keys(updateData).length === 0) {
       return res.status(400).json({
-        error: "userId and newUsername are required",
+        error: "At least one field to update is required",
       });
     }
 
-    // 2️⃣ Update user in DB
+    // Check if username is being changed and if it's already taken
+    if (updateData.username) {
+      const existingUser = await User.findOne({
+        username: updateData.username,
+        _id: { $ne: userId },
+      });
+      if (existingUser) {
+        return res.status(400).json({
+          error: "Username already taken",
+        });
+      }
+    }
+
+    // Update user in DB
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      { username: newUsername },
-      { new: true } // return updated updated document
+      updateData,
+      { new: true, runValidators: true }
     );
 
     if (!updatedUser) {
@@ -119,28 +164,72 @@ router.patch("/edit", authMiddleware, async (req, res) => {
       });
     }
 
-    // 3️⃣ Success response
+    // Remove password from response
+    const userResponse = {
+      id: updatedUser._id,
+      username: updatedUser.username,
+      firstName: updatedUser.firstName,
+      lastName: updatedUser.lastName,
+    };
+
     res.status(200).json({
-      message: "Username updated successfully!",
-      user: updatedUser,
+      message: "User updated successfully!",
+      user: userResponse,
     });
   } catch (error) {
+    console.error("Update error:", error);
     res.status(500).json({
-      message: "Failed to update username",
-      error: error.message,
+      error: "Failed to update user",
+      details: error.message,
     });
   }
 });
 
-//Get api to fetch user details
+// GET /api/v1/user/bulk - Get all users (for search/transfer)
 router.get("/bulk", authMiddleware, async (req, res) => {
   try {
     const users = await User.find().select("-password");
-    res.status(200).json({ users });
+    res.status(200).json({
+      success: true,
+      users,
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ error: "Failed to fetch users", details: error.message });
+    console.error("Bulk fetch error:", error);
+    res.status(500).json({
+      error: "Failed to fetch users",
+      details: error.message,
+    });
   }
 });
+
+// GET /api/v1/user/me - Get current user profile
+router.get("/me", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        id: user._id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+    });
+  } catch (error) {
+    console.error("Profile fetch error:", error);
+    res.status(500).json({
+      error: "Failed to fetch profile",
+      details: error.message,
+    });
+  }
+});
+
 module.exports = router;
