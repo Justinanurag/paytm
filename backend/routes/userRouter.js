@@ -3,7 +3,7 @@ const User = require("../Models/userModel.js");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
-const authMiddleware =require("../middleware/authMiddleware.js")
+const authMiddleware = require("../middleware/authMiddleware.js");
 require("dotenv").config();
 const SECRET_KEY = process.env.JWT_SECRET;
 // POST /api/v1/users - Create new user
@@ -124,7 +124,6 @@ router.patch("/edit", authMiddleware, async (req, res) => {
       message: "Username updated successfully!",
       user: updatedUser,
     });
-
   } catch (error) {
     res.status(500).json({
       message: "Failed to update username",
@@ -133,5 +132,15 @@ router.patch("/edit", authMiddleware, async (req, res) => {
   }
 });
 
+//Get api to fetch user details
+router.get("/bulk", authMiddleware, async (req, res) => {
+  try {
+    const users = await User.find().select("-password");
+    res.status(200).json({ users });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "Failed to fetch users", details: error.message });
+  }
+});
 module.exports = router;
-
